@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Purple Donut的博客</title><link>https://3checktheerror.github.io</link><description>I Don’t Finish. I Wander.</description><copyright>Purple Donut的博客</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://3checktheerror.github.io</link></image><lastBuildDate>Tue, 10 Mar 2026 04:09:27 +0000</lastBuildDate><managingEditor>Purple Donut的博客</managingEditor><ttl>60</ttl><webMaster>Purple Donut的博客</webMaster><item><title>RL with DQN</title><link>https://3checktheerror.github.io/post/RL%20with%20DQN.html</link><description>### 理论
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Purple Donut的博客</title><link>https://3checktheerror.github.io</link><description>I Don’t Finish. I Wander.</description><copyright>Purple Donut的博客</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://3checktheerror.github.io</link></image><lastBuildDate>Tue, 10 Mar 2026 04:10:10 +0000</lastBuildDate><managingEditor>Purple Donut的博客</managingEditor><ttl>60</ttl><webMaster>Purple Donut的博客</webMaster><item><title>RL with DQN</title><link>https://3checktheerror.github.io/post/RL%20with%20DQN.html</link><description>### 理论
 [点这里](https://www.youtube.com/watch?v=x83WmvbRa2I)
 #### 组成
 输入：state，action
@@ -10,18 +10,7 @@ Q Table represents an agent's conscience
 Deep Q-networks combine Q-learning with neural networks
 
 #### 训练过程
-* 根据q-network和target-network计算loss function，根据loss更新q-network参数。</description><guid isPermaLink="true">https://3checktheerror.github.io/post/RL%20with%20DQN.html</guid><pubDate>Tue, 10 Mar 2026 04:08:57 +0000</pubDate></item><item><title>DQN</title><link>https://3checktheerror.github.io/post/DQN.html</link><description>### 理论
-[点这里](https://www.youtube.com/watch?v=x83WmvbRa2I)
-#### 组成
-输入：state，action
-中间：deep q network
-输出：q-value
-
-Q Table represents an agent's conscience
-Deep Q-networks combine Q-learning with neural networks
-
-#### 训练过程
-* 根据q-network和target-network计算loss function，根据loss更新q-network参数。</description><guid isPermaLink="true">https://3checktheerror.github.io/post/DQN.html</guid><pubDate>Mon, 09 Mar 2026 14:07:25 +0000</pubDate></item><item><title>Distillation &amp; Finetune相关</title><link>https://3checktheerror.github.io/post/Distillation%20%26%20Finetune-xiang-guan.html</link><description>### 流程
+* 根据q-network和target-network计算loss function，根据loss更新q-network参数。</description><guid isPermaLink="true">https://3checktheerror.github.io/post/RL%20with%20DQN.html</guid><pubDate>Tue, 10 Mar 2026 04:08:57 +0000</pubDate></item><item><title>Distillation &amp; Finetune相关</title><link>https://3checktheerror.github.io/post/Distillation%20%26%20Finetune-xiang-guan.html</link><description>### 流程
 1. Sample生成的数据S
 2. 读取S中的市场数据：price, volume, volatility, tick_change； 随机生成eth和usdc持仓
 3. 构造prompt，提前规定好Chain of Draft，发送给teacher model
