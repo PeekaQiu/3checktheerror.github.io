@@ -1,5 +1,13 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Purple Donut的博客</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link><description>I Don’t Finish. I Wander.</description><copyright>Purple Donut的博客</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link></image><lastBuildDate>Mon, 16 Mar 2026 05:33:16 +0000</lastBuildDate><managingEditor>Purple Donut的博客</managingEditor><ttl>60</ttl><webMaster>Purple Donut的博客</webMaster><item><title>业务逻辑：钱包/信号跟单</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/ye-wu-luo-ji-%EF%BC%9A-qian-bao---xin-hao-gen-dan.html</link><description>### 总体概览
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Purple Donut的博客</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link><description>I Don’t Finish. I Wander.</description><copyright>Purple Donut的博客</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link></image><lastBuildDate>Mon, 16 Mar 2026 06:01:29 +0000</lastBuildDate><managingEditor>Purple Donut的博客</managingEditor><ttl>60</ttl><webMaster>Purple Donut的博客</webMaster><item><title>Part1-多源链上数据接入</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/Part1--duo-yuan-lian-shang-shu-ju-jie-ru.html</link><description>## 1. 为什么要把数据放在 Kafka 和 Redis 分开存储？
+先说结论：
+
+这个项目不是“随便用了两个中间件”，而是根据两类数据的业务特征，做了明确分工：
+
+- `Kafka`：承接更偏“区块级、批量、可回放、可重消费”的数据
+- `Redis PubSub`：承接更偏“低延迟、实时、轻量、直接推送”的数据
+
+这背后的核心不是技术偏好，而是链上监控场景里两种完全不同的数据形态。</description><guid isPermaLink="true">https://PeekaQiu.github.io/3checktheerror.github.io/post/Part1--duo-yuan-lian-shang-shu-ju-jie-ru.html</guid><pubDate>Mon, 16 Mar 2026 06:00:57 +0000</pubDate></item><item><title>业务逻辑：钱包/信号跟单</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/ye-wu-luo-ji-%EF%BC%9A-qian-bao---xin-hao-gen-dan.html</link><description>### 总体概览
 
 **钱包跟单相关代码主要在 `apps/debot_monitor_center` 下，分三大块：**
 
