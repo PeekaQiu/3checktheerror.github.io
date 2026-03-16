@@ -1,13 +1,22 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Purple Donut的博客</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link><description>I Don’t Finish. I Wander.</description><copyright>Purple Donut的博客</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link></image><lastBuildDate>Mon, 16 Mar 2026 03:30:53 +0000</lastBuildDate><managingEditor>Purple Donut的博客</managingEditor><ttl>60</ttl><webMaster>Purple Donut的博客</webMaster><item><title>重要Processor-1</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/zhong-yao-Processor-1.html</link><description># MergeSwapRecordsProcessor
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0"><channel><title>Purple Donut的博客</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link><description>I Don’t Finish. I Wander.</description><copyright>Purple Donut的博客</copyright><docs>http://www.rssboard.org/rss-specification</docs><generator>python-feedgen</generator><image><url>https://github.githubassets.com/favicons/favicon.svg</url><title>avatar</title><link>https://PeekaQiu.github.io/3checktheerror.github.io</link></image><lastBuildDate>Mon, 16 Mar 2026 04:26:46 +0000</lastBuildDate><managingEditor>Purple Donut的博客</managingEditor><ttl>60</ttl><webMaster>Purple Donut的博客</webMaster><item><title>重要Processor-1</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/zhong-yao-Processor-1.html</link><description># MergeSwapRecordsProcessor
 。</description><guid isPermaLink="true">https://PeekaQiu.github.io/3checktheerror.github.io/post/zhong-yao-Processor-1.html</guid><pubDate>Mon, 16 Mar 2026 03:30:27 +0000</pubDate></item><item><title>技术细节：Processor逻辑</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/ji-shu-xi-jie-%EF%BC%9AProcessor-luo-ji.html</link><description>## 架构
 * 基于责任链思想实现的顺序处理流水线
 * 把所有处理步骤抽象成 Processor 接口，按注册顺序组成一条链，上一步的输出就是下一步的输入
 * 某一步返回 nil 就会提前终止后续处理
 * 这个结构借鉴了责任链模式，但更多是用来做数据处理流水线而不是纯粹的“谁负责处理请求”的场景
 
+## 重要Processor
+从你现在的理解深度来看，要把这个项目的**主要业务场景都吃透**，重点把下面这几条“主链路”里的 Processor 搞清楚就够了（按重要性和典型性排序）：
 
-。</description><guid isPermaLink="true">https://PeekaQiu.github.io/3checktheerror.github.io/post/ji-shu-xi-jie-%EF%BC%9AProcessor-luo-ji.html</guid><pubDate>Mon, 16 Mar 2026 03:28:01 +0000</pubDate></item><item><title>注意事项</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/zhu-yi-shi-xiang.html</link><description>### 技巧
+### 一、EVM 区块处理链（链上原始数据 → 结构化行为 + DEX 特征）
+
+文件：`tasks/evm_block_process/main.go`
+
+重点 Processor：
+
+1. **`BlockTxDecodeProcessor`**  
+   - 作用：把原始区块/交易日志解码成项目内部通用结构（包含 tx、logs、actions 的骨架）。</description><guid isPermaLink="true">https://PeekaQiu.github.io/3checktheerror.github.io/post/ji-shu-xi-jie-%EF%BC%9AProcessor-luo-ji.html</guid><pubDate>Mon, 16 Mar 2026 03:28:01 +0000</pubDate></item><item><title>注意事项</title><link>https://PeekaQiu.github.io/3checktheerror.github.io/post/zhu-yi-shi-xiang.html</link><description>### 技巧
 * 默认是云端的，本地部署向量模型能提速5倍以上
 * memoryFlush和memorySearch功能，会在本地存储记忆
 * 云端龙虾需要开放防火墙，但不用代理，更麻烦

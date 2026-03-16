@@ -16,8 +16,17 @@
 * 某一步返回 nil 就会提前终止后续处理
 * 这个结构借鉴了责任链模式，但更多是用来做数据处理流水线而不是纯粹的“谁负责处理请求”的场景
 
+## 重要Processor
+从你现在的理解深度来看，要把这个项目的**主要业务场景都吃透**，重点把下面这几条“主链路”里的 Processor 搞清楚就够了（按重要性和典型性排序）：
 
-。">
+### 一、EVM 区块处理链（链上原始数据 → 结构化行为 + DEX 特征）
+
+文件：`tasks/evm_block_process/main.go`
+
+重点 Processor：
+
+1. **`BlockTxDecodeProcessor`**  
+   - 作用：把原始区块/交易日志解码成项目内部通用结构（包含 tx、logs、actions 的骨架）。">
 <meta property="og:title" content="技术细节：Processor逻辑">
 <meta property="og:description" content="## 架构
 * 基于责任链思想实现的顺序处理流水线
@@ -25,8 +34,17 @@
 * 某一步返回 nil 就会提前终止后续处理
 * 这个结构借鉴了责任链模式，但更多是用来做数据处理流水线而不是纯粹的“谁负责处理请求”的场景
 
+## 重要Processor
+从你现在的理解深度来看，要把这个项目的**主要业务场景都吃透**，重点把下面这几条“主链路”里的 Processor 搞清楚就够了（按重要性和典型性排序）：
 
-。">
+### 一、EVM 区块处理链（链上原始数据 → 结构化行为 + DEX 特征）
+
+文件：`tasks/evm_block_process/main.go`
+
+重点 Processor：
+
+1. **`BlockTxDecodeProcessor`**  
+   - 作用：把原始区块/交易日志解码成项目内部通用结构（包含 tx、logs、actions 的骨架）。">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://PeekaQiu.github.io/3checktheerror.github.io/post/ji-shu-xi-jie-%EF%BC%9AProcessor-luo-ji.html">
 <meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
@@ -55,7 +73,17 @@ body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;
     body {padding: 8px;}
     .postTitle{font-size:24px;}
 }
-
+.copy-feedback {
+    display: none;
+    position: absolute;
+    top: 10px;
+    right: 50px;
+    color: var(--color-fg-on-emphasis);
+    background-color: var(--color-fg-muted);
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-size: 12px;
+}
 </style>
 
 
@@ -93,7 +121,282 @@ body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;
 <li>把所有处理步骤抽象成 Processor 接口，按注册顺序组成一条链，上一步的输出就是下一步的输入</li>
 <li>某一步返回 nil 就会提前终止后续处理</li>
 <li>这个结构借鉴了责任链模式，但更多是用来做数据处理流水线而不是纯粹的“谁负责处理请求”的场景</li>
-</ul></div>
+</ul>
+<h2>重要Processor</h2>
+<p>从你现在的理解深度来看，要把这个项目的<strong>主要业务场景都吃透</strong>，重点把下面这几条“主链路”里的 Processor 搞清楚就够了（按重要性和典型性排序）：</p>
+<h3>一、EVM 区块处理链（链上原始数据 → 结构化行为 + DEX 特征）</h3>
+<p>文件：<code class="notranslate">tasks/evm_block_process/main.go</code></p>
+<p>重点 Processor：</p>
+<ol>
+<li>
+<p><strong><code class="notranslate">BlockTxDecodeProcessor</code></strong></p>
+<ul>
+<li>作用：把原始区块/交易日志解码成项目内部通用结构（包含 tx、logs、actions 的骨架）。</li>
+<li>场景：所有后续 DEX 解析、规则、监控都基于它产生的结构。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">DexPoolCreateProcessor</code> / <code class="notranslate">DexPoolEventProcessor</code></strong></p>
+<ul>
+<li>作用：识别/维护 DEX 池子（pair）的元数据与储备变化。</li>
+<li>场景：保证后续 DEX 价格、流动性等解析有正确的 pair 信息和储备。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">DexProcessor</code></strong>（极重要）</p>
+<ul>
+<li>作用：
+<ul>
+<li>从交易 logs 中识别各种 Swap（V2/V3/V4、four.meme、flap 等）；</li>
+<li>计算价格、成交量、储备；</li>
+<li>识别套利机器人、三明治攻击；</li>
+<li>产出 <code class="notranslate">SwapRecord</code> 和丰富的 <code class="notranslate">TransactionWithActions</code>。</li>
+</ul>
+</li>
+<li>场景：理解“<strong>我们是如何从原始链上数据得出价格 / 成交 / 攻击特征</strong>”的关键。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">WriteBlockDataToKafka</code> / <code class="notranslate">WriteActionsToKafka</code></strong></p>
+<ul>
+<li>作用：把结构化后的区块+行为写回 Kafka，作为后续监控和统计的上游数据源。</li>
+<li>场景：理解“分析链路的出口”。</li>
+</ul>
+</li>
+</ol>
+<h3>二、钱包与交易监控链（行为 → 规则 → 告警）</h3>
+<p>文件：<code class="notranslate">apps/debot_monitor_center/wallet_tx_monitor.go</code></p>
+<p>重点 Processor：</p>
+<ol>
+<li>
+<p><strong><code class="notranslate">DataDecodeProcessor</code></strong></p>
+<ul>
+<li>作用：从 Kafka 读到的数据还原成 <code class="notranslate">TransactionWithActions</code>（包含我们在上游构建的各种行为标记）。</li>
+<li>场景：监控链路的入口，等价于“还原一笔 tx 上所有行为”。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">PreDataProcessor</code></strong>（很重要）</p>
+<ul>
+<li>作用：
+<ul>
+<li>找出这一笔 tx 里“在用户监控列表中的钱包/代币”；</li>
+<li>为每个监控钱包/代币生成独立的统计（买卖次数、净持仓、成交额等）。</li>
+</ul>
+</li>
+<li>场景：把“交易级别”数据投影到“<strong>用户关心的监控维度</strong>”。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">WalletMonitorRulesCheckProcessor</code></strong>（极重要）</p>
+<ul>
+<li>作用：
+<ul>
+<li>按用户配置的策略规则（价格、市值、黑白名单、频率、运行时段等）检查监控结果；</li>
+<li>结合 <code class="notranslate">NotificationLimiter</code> 做限流；</li>
+<li>构造 <code class="notranslate">NotificationRecord</code> 并写 Kafka/Redis。</li>
+</ul>
+</li>
+<li>场景：理解“<strong>规则引擎 + 告警生成</strong>”。</li>
+</ul>
+</li>
+</ol>
+<h3>三、Swap 记录监控与钱包组跟单（Swap → Maker 流量聚合 → 规则 / 跟单）</h3>
+<p>文件：</p>
+<ul>
+<li><code class="notranslate">apps/debot_monitor_center/swap_records_monitor.go</code></li>
+<li><code class="notranslate">apps/debot_monitor_center/wallet_group_copy_order_monitor.go</code></li>
+</ul>
+<p>重点 Processor（两个场景共用核心）：</p>
+<ol>
+<li>
+<p><strong><code class="notranslate">DecodeBlockTxProcessor</code> / <code class="notranslate">DecodeSwapTxProcessor</code> / <code class="notranslate">FilterBlockTxProcessor</code> / <code class="notranslate">FilterSwapTxProcessor</code></strong></p>
+<ul>
+<li>作用：把 Kafka 的区块数据、Redis 的 swap 数据解码并去重。</li>
+<li>场景：理解“上游 swap 数据是怎么以统一格式进入 merge 链路的”。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">MergeSwapRecordsProcessor</code></strong>（极重要，你已经在看）</p>
+<ul>
+<li>作用：
+<ul>
+<li>把区块数据 + swap 流合并；</li>
+<li>只保留监控钱包、且在 <code class="notranslate">BalanceChanges</code> 中有净流入/流出的 Popular 代币；</li>
+<li>按 maker + token 聚合成 <strong>净流入/流出 + 金额 + 平台币计价</strong>；</li>
+<li>产出 <code class="notranslate">MergedSwapResult</code> 和 <code class="notranslate">SingleSwapResult</code>。</li>
+</ul>
+</li>
+<li>场景：讲清“<strong>我们如何从多条 swap 聚合出一个地址这一笔的净买入/净卖出</strong>”。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">SwapRecordsMonitorRulesCheckProcessor</code></strong></p>
+<ul>
+<li>作用：在 <code class="notranslate">SingleSwapResult</code> 维度上跑一套规则（类似钱包监控，但针对 swap 聚合结果），产出告警。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">SwapRecordGroupCopyOrderProcessor</code></strong>（在钱包组跟单场景）</p>
+<ul>
+<li>作用：基于钱包组配置和 <code class="notranslate">SingleSwapResult</code>，产出跟单信号（写入 Mongo/Redis），驱动复制交易。</li>
+<li>场景：和校招生聊“<strong>跟单/复制交易如何触发</strong>”时很好讲。</li>
+</ul>
+</li>
+</ol>
+<h3>四、规则引擎与限流（支撑上面所有监控/跟单场景）</h3>
+<p>文件：<code class="notranslate">apps/debot_monitor_center/core/rules/*.go</code>、<code class="notranslate">apps/debot_monitor_center/core/limit/notification_limit.go</code></p>
+<p>重点组件（不是 Processor 接口，但你必须理解）：</p>
+<ol>
+<li>
+<p><strong><code class="notranslate">RulesChecker</code> &amp; <code class="notranslate">MonitorRules</code>（<code class="notranslate">rule.go</code>）</strong></p>
+<ul>
+<li>作用：
+<ul>
+<li>把策略配置解析为一组规则（普通/Build/Heavy/Limit）；</li>
+<li>定义规则执行顺序（先普通再 Heavy 再 Limit）；</li>
+<li>提供 <code class="notranslate">Check</code> / <code class="notranslate">CheckToBuildMonitorEvent</code> / <code class="notranslate">CheckMergedSwapResult</code> 等接口给 Processor 调用。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>典型规则：<code class="notranslate">rule_price.go</code>、<code class="notranslate">rule_protocol_filter.go</code> 等</strong></p>
+<ul>
+<li>作用：具体实现价格阈值、内外盘过滤、市值过滤等，掌握 2–3 个代表就够。</li>
+</ul>
+</li>
+<li>
+<p><strong><code class="notranslate">NotificationLimiter</code>（<code class="notranslate">notification_limit.go</code>）</strong></p>
+<ul>
+<li>作用：按 user + 时间窗口统计通知次数，限制噪声。</li>
+<li>场景：理解“<strong>如何防止某个策略/用户被刷屏</strong>”。</li>
+</ul>
+</li>
+</ol>
+<h3>五、辅助但值得扫一眼的 Processor</h3>
+<ul>
+<li><strong><code class="notranslate">MonitorEventNotifyProcessor</code> / <code class="notranslate">SystemEventNotifyProcessor</code></strong>（<code class="notranslate">notify_center.go</code>）：告警下游真正推送前的处理。</li>
+<li><strong><code class="notranslate">DataDecodeProcessor</code> 的测试 / Merge 测试</strong>：帮助你理解输入/输出结构。</li>
+</ul>
+<p>这个顺序看 Processor：</p>
+<ol>
+<li><strong><code class="notranslate">tasks/evm_block_process/main.go</code></strong> 中注册的 Processor（重点看 <code class="notranslate">BlockTxDecodeProcessor</code> + <code class="notranslate">DexProcessor</code>）。</li>
+<li><strong><code class="notranslate">apps/debot_monitor_center/wallet_tx_monitor.go</code></strong> 中 4 个 Processor（DataDecode → PreData → RulesCheck）。</li>
+<li><strong><code class="notranslate">apps/debot_monitor_center/swap_records_monitor.go</code> / <code class="notranslate">wallet_group_copy_order_monitor.go</code></strong> 中的 Merge 链路（Decode* / Filter* / MergeSwapRecords / Monitor or CopyOrder）。</li>
+<li><strong><code class="notranslate">apps/debot_monitor_center/core/rules/rule.go</code> + 1–2 个具体规则文件 + <code class="notranslate">notification_limit.go</code></strong>（理解规则引擎+限流）。</li>
+</ol>
+<h2>RuleChecker</h2>
+<p>把一堆规则组织成“可执行规则引擎”</p>
+<ol>
+<li>目标<br>
+把“用户在配置里勾选的一堆条件”转成一串 MonitorRule 对象。<br>
+统一管理执行顺序：<br>
+普通规则（轻量过滤）<br>
+Build 规则（真正生成事件）<br>
+Heavy 规则（耗时的额外过滤）<br>
+Limit 规则（次数/频率限制）</li>
+<li>关键结构</li>
+</ol>
+<pre class="notranslate"><code class="notranslate">type MonitorRule interface {
+    GetRuleName() string
+    CheckAndBuildEvent(...)
+    Check(...)
+    PreHandle(...)
+    CheckMergedSwapResult(...)
+    CheckAndBuildEventForMergedSwapResult(...)
+}
+type RulesChecker struct {
+    Rules          []MonitorRule
+    ExistRuleNames map[string]bool
+    ruleMap        map[string]MonitorRule
+}
+type MonitorRules struct {
+    UserId, MonitorConfigId int64
+    MonitorConfigName       string
+    MonitorType             string
+    MonitorObjects          *sync.Map
+    RuleChecker             *RulesChecker
+    // ...
+}
+</code></pre>
+<p>还有几张“规则注册表”：</p>
+<pre class="notranslate"><code class="notranslate">var allRules        = map[string]func(params []*models.ConfigParameter) MonitorRule
+var allBuildRules   = map[string]func(params []*models.ConfigParameter) MonitorRule
+var allHeavyRules   = map[string]func(params []*models.ConfigParameter) MonitorRule
+var limitRules      = map[string]func(params []*models.ConfigParameter) MonitorRule
+</code></pre>
+<ol start="3">
+<li>构造规则链：NewRulesChecker<br>
+输入：策略配置字符串 configs + 可能的附加参数 additions。<br>
+流程：<br>
+DecodeMonitorStrategyConfigs 把配置解析成 []MonitorStrategyConfig。<br>
+每个 config 根据 ConfigType 去 allRules / allBuildRules / allHeavyRules 找对应的 ruleBuilder。<br>
+调用 ruleBuilder 生成 MonitorRule，放进 Rules 列表，并在 ExistRuleNames 里标记。<br>
+再单独扫一次 config，生成 limitRules（次数类规则），保证它们被 append 到链的最后。</li>
+</ol>
+<h2>NotificationLimiter</h2>
+<ol>
+<li>
+<p>目标<br>
+决定“同一个用户在最近 N 分钟内还能不能再收一条通知”。。<br>
+避免单个用户配置太“宽”导致被刷屏或打爆推送通道。</p>
+</li>
+<li>
+<p>关键结构</p>
+</li>
+</ol>
+<pre class="notranslate"><code class="notranslate">type NotificationLimiter struct {
+    limitMap          sync.Map // userId -&gt; *sync.Map[min -&gt; count]
+    limitTimeInterval int64    // 滚动时间窗，单位：分钟
+}
+limitMap：存最近一段时间内每个分钟的通知数量，用来计算“最近 N 分钟的总通知数”（滚动时间窗）
+key =  60 秒对齐的时间戳，例如：2026-03-12 10:01:xx → minute=10:01:00
+value = 这一分钟内发出去的通知条数：minute → count, minute = 按分钟对齐的时间戳,  count = 该分钟发生了多少条通知
+</code></pre>
+<ol start="3">
+<li>周期清理：autoClearOutData<br>
+构造时会启动一个 goroutine：</li>
+</ol>
+<pre class="notranslate"><code class="notranslate">ticker := time.NewTicker(2 * time.Second)
+for range ticker.C {
+    limiter.autoClearOutData()
+}
+autoClearOutData 逻辑：
+</code></pre>
+<p>计算 “3 小时前”的 unix 时间 unixTime。<br>
+遍历每个 userId 的 minuteMap：<br>
+删掉 minute &lt; unixTime 的条目（即 3 小时之前的数据）。<br>
+如果某个 user 的 minuteMap 被清空了，就从 limitMap 里删掉这个 userId。<br>
+目的：控制内存占用，防止长时间运行后 user → minute 数组</p>
+<ol start="4">
+<li>如何限频？</li>
+</ol>
+<pre class="notranslate"><code class="notranslate">func (n *NotificationLimiter) CheckLimit(userId int, unixTime int64) bool {
+    used := n.GetUsed(userId, unixTime)
+    limit := n.GetLimit(userId)
+    return used &lt;= int64(limit)
+}
+</code></pre>
+<p>这里的GetUsed：<br>
+找到 userId 对应的 minuteMap；<br>
+计算从 startTime = unixTime - limitTimeInterval*60 到 unixTime 之间所有 minute 的 count 总和；<br>
+返回这个总和 = 最近 N 分钟内已经用掉的通知数</p>
+<p>如果CheckLimit返回 false：说明最近 N 分钟发送的通知数已经超过该用户限额，当前事件应丢弃或仅做标记，不再发通知</p>
+<ol start="5">
+<li>Example</li>
+</ol>
+<p>以 WalletMonitorRulesCheckProcessor 为例（钱包行为监控）：</p>
+<ul>
+<li>Processor 调 strategy.RuleChecker.Check(...) / CheckToBuildMonitorEvent(...) → 判断这次行为是否应该触发策略。</li>
+<li>在准备写 NotificationRecord 之前，调用：</li>
+</ul>
+<pre class="notranslate"><code class="notranslate">if !notificationLimiter.CheckLimit(int(strategy.UserId), unixTime) {
+    // 超限，打日志 + Mark，然后 return，不发这条通知
+}
+</code></pre>
+<p>只有 规则通过 + 未超限 才真正构造 NotificationRecord 并写 Kafka/Redis；然后再：</p>
+<p><code class="notranslate">notificationLimiter.AddNotification(int(strategy.UserId), unixTime)</code></p></div>
 <div style="font-size:small;margin-top:8px;float:right;"></div>
 
 <button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
@@ -118,7 +421,7 @@ if(""!=""){
 </script></div>
 </body>
 <script>
-var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z', 'copy': 'M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z', 'check': 'M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'};
 var utterancesLoad=0;
 
 let themeSettings={
@@ -192,7 +495,70 @@ function iFrameLoading(){
     }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+    const createClipboardHTML = (codeContent, additionalClasses = '') => `
+        <pre class="notranslate"><code class="notranslate">${codeContent}</code></pre>
+        <div class="clipboard-container position-absolute right-0 top-0 ${additionalClasses}">
+            <clipboard-copy class="ClipboardButton btn m-2 p-0" role="button" style="display: inherit;">
+                <svg height="16" width="16" class="octicon octicon-copy m-2"><path d="${IconList["copy"]}"></path></svg>
+                <svg height="16" width="16" class="octicon octicon-check color-fg-success m-2 d-none"><path d="${IconList["check"]}"></path></svg>
+            </clipboard-copy>
+            <div class="copy-feedback">Copied!</div>
+        </div>
+    `;
 
+    const handleCodeElements = (selector = '') => {
+        document.querySelectorAll(selector).forEach(codeElement => {
+            const codeContent = codeElement.innerHTML;
+            const newStructure = document.createElement('div');
+            newStructure.className = 'snippet-clipboard-content position-relative overflow-auto';
+            newStructure.innerHTML = createClipboardHTML(codeContent);
+
+            const parentElement = codeElement.parentElement;
+            if (selector.includes('highlight')) {
+                parentElement.insertBefore(newStructure, codeElement.nextSibling);
+                parentElement.removeChild(codeElement);
+            } else {
+                parentElement.parentElement.replaceChild(newStructure, parentElement);
+            }
+        });
+    };
+
+    handleCodeElements('pre.notranslate > code.notranslate');
+    handleCodeElements('div.highlight > pre.notranslate');
+
+    let currentFeedback = null;
+    document.querySelectorAll('clipboard-copy').forEach(copyButton => {
+        copyButton.addEventListener('click', () => {
+            const codeContent = copyButton.closest('.snippet-clipboard-content').innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = codeContent;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            const copyIcon = copyButton.querySelector('.octicon-copy');
+            const checkIcon = copyButton.querySelector('.octicon-check');
+            const copyFeedback = copyButton.nextElementSibling;
+
+            if (currentFeedback && currentFeedback !== copyFeedback) {currentFeedback.style.display = 'none';}
+            currentFeedback = copyFeedback;
+
+            copyIcon.classList.add('d-none');
+            checkIcon.classList.remove('d-none');
+            copyFeedback.style.display = 'block';
+            copyButton.style.borderColor = 'var(--color-success-fg)';
+
+            setTimeout(() => {
+                copyIcon.classList.remove('d-none');
+                checkIcon.classList.add('d-none');
+                copyFeedback.style.display = 'none';
+                copyButton.style.borderColor = '';
+            }, 2000);
+        });
+    });
+});
 
 </script>
 
