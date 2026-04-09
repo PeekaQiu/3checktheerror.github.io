@@ -174,7 +174,38 @@ IQL 的解决方案： 我们不去寻找那个可能不存在的“最大值”
 <li>通常取 <strong>0.7 - 0.9</strong>，在“提取精华”和“抵御噪声”之间取得平衡。</li>
 </ul>
 <h1>GCIVL</h1>
-<p>GCIVL 的核心逻辑分为两步：隐式价值学习（学习环境有多好）和优势加权行为克隆（学习如何达到目标）</p></div>
+<p>GCIVL 的核心逻辑分为两步：隐式价值学习（学习环境有多好）和优势加权行为克隆（学习如何达到目标）</p>
+<h1>HIQL</h1>
+<h2>训练逻辑：如何从离线数据里学习？</h2>
+<p>HIQL 依然遵循 IQL 的“择优录取”思想，但分两步走：</p>
+<h4>A. 价值函数 $V(s, g)$：评估大局</h4>
+<p>它首先学习在当前数据集下，从 $s$ 到 $g$ 到底有多难。</p>
+<ul>
+<li>代码中的 <code class="notranslate">value_loss</code>：使用 Expectile Loss 提取数据集中表现最好的路径价值。</li>
+</ul>
+<h4>B. 底层训练 (Low Actor)：学习“怎么走”</h4>
+<ul>
+<li>它观察数据：当一个人从 $s$ 走到 $s'$，执行了动作 $a$。</li>
+<li>如果这次移动让价值 $V$ 提升了（<code class="notranslate">adv = nv - v</code> 为正），说明这个动作 $a$ 很好。</li>
+<li>员工就会加强学习：在 $s$ 下，为了达到去往 $s'$ 的路标，我应该做动作 $a$。</li>
+</ul>
+<h4>C. 高层训练 (High Actor)：学习“定什么目标”</h4>
+<ul>
+<li>它观察轨迹中的中间点（子目标）。</li>
+<li>如果选择某个中间态作为子目标，能显著提升通往最终目标的价值（<code class="notranslate">adv = nv - v</code>，注意这里的 <code class="notranslate">nv</code> 是子目标的价值）。</li>
+<li>经理就会加强学习：在这种情况下，定这个中间态作为子目标是明智的。</li>
+</ul>
+<hr>
+<h2>推理流程：实战中怎么跑？</h2>
+<p>想象机器人要从房间 A 去房间 C，中间经过房间 B。</p>
+<ol>
+<li>
+<strong>高层决策</strong>：经理看了一眼 A（当前）和 C（终点），输出一个向量 $\phi_B$（代表“往房间 B 走”的抽象信号）。</li>
+<li>
+<strong>底层执行</strong>：员工拿到 $\phi_B$，开始疯狂输出动作（左转、前进、避障）。</li>
+<li>
+<strong>循环</strong>：员工跑了 25 步后，经理再次抬头看路，发现已经到房间 B 了，于是输出下一个信号 $\phi_C$。</li>
+</ol></div>
 <div style="font-size:small;margin-top:8px;float:right;"></div>
 
 <button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
