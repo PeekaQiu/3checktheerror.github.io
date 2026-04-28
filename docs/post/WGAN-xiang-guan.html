@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="
+
+### 理论部分
+
+#### 关于WGAN：
+
+> 一句话总结WGAN-GP月Vanilla GAN的区别：Discriminator得到的是the degree of fake image, rather than the binary classification (real or not). 
+
+##### GAN Training思路链：[详情](https://www.youtube.com/watch?v=jNY1WBb8l4U&t=1608s)
+
+1. Generator的训练: 找一组Generator参数，使从normal distribution中采样后生成的分布尽量接近于于真实分布minimize divergence between Pg and Pdata
+2. 如何计算Divergence? Although we do not know the distributions of Pg and Pdata, we can sample from them. Use database to sample Pdata and normal distribution to sample Pg
+3. Discriminator的训练：把从Pdata和Pg中sample的data混合起来，用discriminator区分。">
+<meta property="og:title" content="WGAN相关">
+<meta property="og:description" content="
+
+### 理论部分
+
+#### 关于WGAN：
+
+> 一句话总结WGAN-GP月Vanilla GAN的区别：Discriminator得到的是the degree of fake image, rather than the binary classification (real or not). 
+
+##### GAN Training思路链：[详情](https://www.youtube.com/watch?v=jNY1WBb8l4U&t=1608s)
+
+1. Generator的训练: 找一组Generator参数，使从normal distribution中采样后生成的分布尽量接近于于真实分布minimize divergence between Pg and Pdata
+2. 如何计算Divergence? Although we do not know the distributions of Pg and Pdata, we can sample from them. Use database to sample Pdata and normal distribution to sample Pg
+3. Discriminator的训练：把从Pdata和Pg中sample的data混合起来，用discriminator区分。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://PeekaQiu.github.io/3checktheerror.github.io/post/WGAN-xiang-guan.html">
+<meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
+<title>WGAN相关</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">WGAN相关</h1>
+<div class="title-right">
+    <a href="https://PeekaQiu.github.io/3checktheerror.github.io" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/PeekaQiu/3checktheerror.github.io/issues/3" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><h3>理论部分</h3>
+<h4>关于WGAN：</h4>
+<blockquote>
+<p>一句话总结WGAN-GP月Vanilla GAN的区别：Discriminator得到的是the degree of fake image, rather than the binary classification (real or not).</p>
+</blockquote>
+<h5>GAN Training思路链：<a href="https://www.youtube.com/watch?v=jNY1WBb8l4U&amp;t=1608s" rel="nofollow">详情</a></h5>
+<ol>
+<li>Generator的训练: 找一组Generator参数，使从normal distribution中采样后生成的分布尽量接近于于真实分布minimize divergence between Pg and Pdata</li>
+<li>如何计算Divergence? Although we do not know the distributions of Pg and Pdata, we can sample from them. Use database to sample Pdata and normal distribution to sample Pg</li>
+<li>Discriminator的训练：把从Pdata和Pg中sample的data混合起来，用discriminator区分。训练一个D, maximize objective function。本质是训练一个classifier, 可以minimize cross entropy</li>
+<li>minimize JS divergence的问题：Pg and Pdata重叠区域小，基本不相似。训练数据样本少，会造成binary classifier 100% accuracy</li>
+</ol>
+<p>可以看到Vailla GAN的痛点：难以计算KL Divergence，难以判断Discriminator是否达标-&gt; using Wasserstein distance as the loss function。</p>
+<h5><a href="https://www.youtube.com/watch?v=QJOEmwvnmTM&amp;t=179s" rel="nofollow">Disc loss的实现</a></h5>
+<p>D在真实数据集的平均预测-D在fake数据集的平均预测+penalty(当梯度超过阈值时，惩罚梯度)<br>
+penalty如何实现才能跟踪梯度？Lipschitz常数，使用L2归一化添加输出相对于输入的变化，并将其限制在1的范围内，并用lambda超参数控制梯度的影响范围</p>
+<h4>什么是 Lipschitz</h4>
+<p>可以理解为给D的打分函数设定一个“斜率限速”。输入数据哪怕发生了一点点微小的变化，判别器给出的分数也不能发生剧变（梯度范数不能超过 1）。这是 WGAN 理论成立的前提。如果真实数据方差极大，导致D为了区分真假，拼命拉高打分函数的斜率。此时如果 lambda_gp 给的权重不够大，压不住这种趋势，Lipschitz 约束就会失效，导致震荡</p>
+<h3>流程</h3>
+<h4>数据清洗</h4>
+<p>特征简单处理：</p>
+<ol>
+<li>根据tick算price</li>
+<li>amount0, amount1换算，得到交易量</li>
+<li>计算volatility：滑动窗口算标准差</li>
+<li>计算volume_ma：交易量均线(滑动窗口算均值)</li>
+<li>计算liquidity_usage：估计单笔交易对资金池深度的冲击大小：volume / (liquidity + 1)</li>
+</ol>
+<p>特征进阶处理：</p>
+<ul>
+<li>对于可能有high outliers的特征：signed log transform</li>
+<li>否则：z-score normalization</li>
+</ul>
+<p>结果：</p>
+<ul>
+<li>sequences: (样本总数, 序列时间步长, 特征维度)</li>
+<li>conditions: (样本总数, 条件维度)</li>
+</ul>
+<h4>训练</h4>
+<p>D每训练5次，G才训练1次。为了提高G的生成质量</p>
+<h5>如何训练D?</h5>
+<p>G接收一段随机噪声，并结合conditions（市场情况），生成一段交易流水fake_sequences：</p>
+<ol>
+<li>计算Wasserstein distance （对于G越小越好，D反之）</li>
+<li>计算gradient penalty</li>
+</ol>
+<ul>
+<li>为了解决GAN训练不稳定和Mode Collapse问题，计算判别器输出相对于插值点的梯度，算模长</li>
+</ul>
+<h5>如何训练G?</h5>
+<ul>
+<li>计算生成的批次内两两样本的距离，并作为负损失加入。最小化这个负数相当于最大化样本间的距离，鼓励模型生成多样的交易序列</li>
+<li>计算feature matching loss，强迫G在特征空间上与真实数据对齐</li>
+</ul>
+<h4>生成</h4>
+<ul>
+<li>喂给模型随机正态分布噪声 z = torch.randn(...) 和随机的市场条件 conditions。模型就能前向传播，吐出包含价格、交易量的序列矩阵<br>
+注意denormalize generated sequences：</li>
+<li>把模型输出的那些无意义的小数，按照真实的均值和标准差，还原回真实的 ETH 价格和真实的交易量</li>
+<li>后处理：如果这段时间的交易量几乎为0, 那么强行让现在的价格等于上一秒的价格</li>
+</ul>
+<h4>Validate Generated Data</h4>
+<ul>
+<li>ks_statistic：两个数据分布的差异。值域为 [0, 1]，越接近 0 表示两个分布越一致</li>
+<li>ks_pvalue：越高，拒绝“两者来自同一分布”的理由越不充分</li>
+<li>生成数据的mean, std, median, min, max</li>
+</ul>
+<h3>结果分析</h3>
+<h4>数据校验方式</h4>
+<h5>最终校验</h5>
+<p>分布维度：模型是否学到了数值分布上的规律<br>
+EXCELLENT：需同时满足 ks_stat &lt; 0.1 且 均值误差 &lt; 10% 且 标准差误差 &lt; 15%<br>
+GOOD：需同时满足 ks_stat &lt; 0.2 且 均值误差 &lt; 20% 且 标准差误差 &lt; 30%<br>
+FAIR：需同时满足 ks_stat &lt; 0.3 且 均值误差 &lt; 30% 且 标准差误差 &lt; 50%<br>
+POOR：只要上述任一条件不满足，直接归为 POOR<br>
+时序维度：模型是否学到了时间轴上的变化规律<br>
+EXCELLENT：autocorr_diff &lt; 0.1<br>
+GOOD：autocorr_diff &lt; 0.2<br>
+FAIR：autocorr_diff &lt; 0.3<br>
+POOR：autocorr_diff &gt;= 0.3</p>
+<p>其次，随机从真实数据集中采样真实交易序列，与同等数量的合成交易序列比对</p>
+<h5>生成合成交易序列时</h5>
+<p>模型输出归一化向量后，反归一化，校验后绘制折线图</p>
+<h4>实际结果分析和解释</h4>
+<ol>
+<li>合成数据在数量级：预处理时的对数转换（Log Transform）或 Z-score 标准化处理不当，生成器输出的微小噪声在反归一化时就会被指数级放大，导致误差达到数百万倍</li>
+<li>模式奔溃：<code class="notranslate">volatility</code>为常数，G放弃生成多样的数据，转而让某些特征归零</li>
+<li><code class="notranslate">price</code>和<code class="notranslate">tick</code>的<code class="notranslate">autocorr_diff </code>很小，其他很大：模型成功抓住了“价格”在时间轴上的平滑变化和动量规律，但孤立了其他特征</li>
+<li><code class="notranslate">g_losses</code>和<code class="notranslate">w_distances</code>震荡：要么是D太弱，被G的异常值骗了；要么是梯度惩罚权重不足以维持 1-Lipschitz 约束</li>
+</ol>
+<h4>解决方案</h4>
+<ol>
+<li>改进数据预处理管道:</li>
+</ol>
+<ul>
+<li>在计算均值和方差前，将真实数据中的极端交易量进行截断</li>
+<li>针对 <code class="notranslate">liquidity_usage</code> 这种极小值，在标准化前先将其整体乘以10, 将其拉伸到正常的浮点数范围内，避免精度丢失</li>
+<li>反归一化逻辑中，加入严格clamping：规定生成的 <code class="notranslate">amount</code> 绝不能超过历史真实最大值的 1.5 倍，且不能为负数</li>
+</ul>
+<ol start="2">
+<li>GAN生成最基础的核心变量：price, amount, time_diff，其他如volatility，volume_ma, tick_change通过计算生成的核心变量得出</li>
+<li>稳定 WGAN-GP 训练超参数: 降低学习率, 增加 Critic 步数, 上调 <code class="notranslate">lambda_gp</code></li>
+</ol></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://PeekaQiu.github.io/3checktheerror.github.io">Purple Donut的博客</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行 "+diffDay+" 天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.disabled=true;
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","PeekaQiu/3checktheerror.github.io");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+
+
+</html>

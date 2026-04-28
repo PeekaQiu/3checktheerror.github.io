@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="### 总体概览
+
+**钱包跟单相关代码主要在 `apps/debot_monitor_center` 下，分三大块：**
+
+- **配置层**：从 Mongo `dt_copy_order_task` 读取并维护“跟单任务”与钱包映射。">
+<meta property="og:title" content="业务逻辑：钱包/信号跟单">
+<meta property="og:description" content="### 总体概览
+
+**钱包跟单相关代码主要在 `apps/debot_monitor_center` 下，分三大块：**
+
+- **配置层**：从 Mongo `dt_copy_order_task` 读取并维护“跟单任务”与钱包映射。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://PeekaQiu.github.io/3checktheerror.github.io/post/ye-wu-luo-ji-%EF%BC%9A-qian-bao---xin-hao-gen-dan.html">
+<meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
+<title>业务逻辑：钱包/信号跟单</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">业务逻辑：钱包/信号跟单</h1>
+<div class="title-right">
+    <a href="https://PeekaQiu.github.io/3checktheerror.github.io" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/PeekaQiu/3checktheerror.github.io/issues/13" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><h3>总体概览</h3>
+<p><strong>钱包跟单相关代码主要在 <code class="notranslate">apps/debot_monitor_center</code> 下，分三大块：</strong></p>
+<ul>
+<li><strong>配置层</strong>：从 Mongo <code class="notranslate">dt_copy_order_task</code> 读取并维护“跟单任务”与钱包映射。</li>
+<li><strong>信号生成层</strong>：
+<ul>
+<li>基于链上实时 swap → “钱包组跟单信号”（<code class="notranslate">wallet_group_copy</code>）。</li>
+<li>基于频道告警（<code class="notranslate">dt_channel_alerts</code>）→ “信号跟单信号”（<code class="notranslate">signal_copy</code>）。</li>
+</ul>
+</li>
+<li><strong>结果通知层</strong>：跟单执行结果（<code class="notranslate">TradeResult + CopyOrderTransaction</code>）→ 系统消息 / app 推送 / websocket。</li>
+</ul>
+<hr>
+<h3>1. 配置与开启/关闭钱包跟单</h3>
+<h4>1.1 跟单任务模型（配置数据）</h4>
+<ul>
+<li><strong>业务含义</strong>：一条 CopyOrder 任务 = 一个“钱包/钱包组/信号”的跟单策略配置（含链、参数、策略规则、钱包组等），存放在 Mongo <code class="notranslate">dt_copy_order_task</code>。</li>
+<li><strong>代码位置</strong>：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/models/copy_order_request.go</code></li>
+<li>关键内容：
+<ul>
+<li>跟单类型常量：
+<ul>
+<li><code class="notranslate">CopyTypeWallet = "wallet_copy"</code>（单钱包）</li>
+<li><code class="notranslate">CopyTypeWalletGroup = "wallet_group_copy"</code>（钱包组）</li>
+<li><code class="notranslate">CopyTypeSignal = "signal_copy"</code>（信号跟单）</li>
+</ul>
+</li>
+<li>状态：
+<ul>
+<li><code class="notranslate">StatusRunning = "running"</code>（开启）</li>
+<li><code class="notranslate">StatusStopped = "stopped"</code>（关闭）</li>
+</ul>
+</li>
+<li>结构体：
+<ul>
+<li><code class="notranslate">type CopyOrder struct { ... CopyType string; WalletGroups []WalletGroup; CopyStrategy; TradingParams; TradingStrategy ... }</code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>1.2 配置加载器：读取/刷新 dt_copy_order_task</h4>
+<ul>
+<li>
+<p><strong>业务含义</strong>：周期性从 Mongo 拉取 <code class="notranslate">status=running</code> 的 CopyOrder 任务，转换成内存中的“监控规则 + 钱包映射”，供处理器快速查询。</p>
+</li>
+<li>
+<p><strong>代码位置</strong>：</p>
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/core/user_configs/copy_order_config_loader.go</code></li>
+<li>关键方法/角色：
+<ul>
+<li><code class="notranslate">CopyOrderCollectionName = "dt_copy_order_task"</code>：Mongo 集合名。</li>
+<li><code class="notranslate">NewCopyOrderConfigLoader(notificationLimiter, copyType, chainType string)</code>
+<ul>
+<li>根据 <code class="notranslate">copyType</code>（钱包组 / 信号等）和 <code class="notranslate">chainType</code> 初始化 Loader。</li>
+</ul>
+</li>
+<li><code class="notranslate">(*CopyOrderConfigLoader) Start(ctx)</code>
+<ul>
+<li>启动时调用 <code class="notranslate">LoadRunningCopyOrders()</code>；之后每 10s 执行 <code class="notranslate">increaseLoadUserConfigs()</code>，动态生效新任务/状态。</li>
+</ul>
+</li>
+<li><code class="notranslate">LoadRunningCopyOrders()</code>
+<ul>
+<li>筛选条件：<code class="notranslate">status = StatusRunning</code>、<code class="notranslate">copy_type = loader.CopyType</code>、链过滤等；</li>
+<li>调 <code class="notranslate">loadConfigs(copyOrders)</code> 解析配置。</li>
+</ul>
+</li>
+<li><code class="notranslate">loadConfigs</code> 中核心逻辑：
+<ul>
+<li>为每个 <code class="notranslate">CopyOrder</code> 生成 <code class="notranslate">MonitorRules</code>（规则+策略+token 限制等）。</li>
+<li>通过 <code class="notranslate">WalletGroups</code> → <code class="notranslate">getGroupWallets</code> 获取真实钱包列表；</li>
+<li>将钱包映射到策略：
+<ul>
+<li><code class="notranslate">UserConfigsLoader.monitorWallets[wallet]</code> / <code class="notranslate">monitorStrategies</code>。</li>
+</ul>
+</li>
+<li>为每个策略设置 <code class="notranslate">RuleChecker</code>：
+<ul>
+<li><code class="notranslate">rules.NewCopyOrderRulesChecker(chain, copyOrder.CopyStrategy.Configs.Rules)</code>，</li>
+<li>并记录 <code class="notranslate">TokenMaxBuyTimes</code> 等。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>供业务调用的接口：
+<ul>
+<li><code class="notranslate">GetCopyOrderRules(chain string)</code>：按链返回所有 <code class="notranslate">signal_copy</code> 规则列表；</li>
+<li><code class="notranslate">GetCopyOrderRuleByID(copyOrderRequestID string)</code>：按任务 ID 取配置；</li>
+<li>Redis 计数相关接口见下文。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>业务结论</strong>：</p>
+<ul>
+<li><strong>开启任务</strong>：上游把某条任务写入 <code class="notranslate">dt_copy_order_task</code> 且 <code class="notranslate">status=running</code> → Loader 在下一次轮询时加载进来。</li>
+<li><strong>关闭任务</strong>：将任务 <code class="notranslate">status</code> 改为 <code class="notranslate">stopped</code> → Loader 下次轮询时从内存结构中去掉，不再触发跟单。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>注意：<strong>创建/编辑 <code class="notranslate">dt_copy_order_task</code> 的 API 不在本仓库</strong>，这里只消费现有配置。</p>
+</blockquote>
+<hr>
+<h3>2. 钱包组跟单：链上 swap → 跟单信号</h3>
+<h4>2.1 服务入口：<code class="notranslate">wallet_group_copy_order_monitor</code></h4>
+<ul>
+<li><strong>业务含义</strong>：消费链上交易 / swap 事件，对“被配置为钱包组跟单（<code class="notranslate">wallet_group_copy</code>）”的钱包组生成跟单信号，写入 <code class="notranslate">dt_copy_order_signals</code>，供实际下单服务消费。</li>
+<li><strong>代码位置</strong>：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/wallet_group_copy_order_monitor.go</code></li>
+<li>关键流程（<code class="notranslate">StartWalletGroupCopyOrderMonitor</code> + <code class="notranslate">main()</code>）：
+<ul>
+<li>读配置：<code class="notranslate">chain_type</code>、Kafka topic、Redis channel、consumer group 等。</li>
+<li>启动协议数据周期更新：<code class="notranslate">rules.StartPeriodicProtocolUpdate</code>。</li>
+<li>初始化：
+<ul>
+<li><code class="notranslate">notificationLimiter := limit.NewNotificationLimiter(60)</code>；</li>
+<li><code class="notranslate">copyOrderConfigLoader := NewCopyOrderConfigLoader(notificationLimiter, CopyTypeWalletGroup, chainType)</code>；</li>
+<li><code class="notranslate">copyOrderConfigLoader.Start(ctx)</code>：开始定期加载 <code class="notranslate">wallet_group_copy</code> 的任务。</li>
+</ul>
+</li>
+<li>构建多数据源消费：
+<ul>
+<li>Kafka：<code class="notranslate">NewConsumeKafkaFactoryWithSink</code> 注册：
+<ul>
+<li><code class="notranslate">DecodeBlockTxProcessor</code>（解码区块交易）</li>
+<li><code class="notranslate">FilterBlockTxProcessor</code>（过滤）。</li>
+</ul>
+</li>
+<li>Redis PubSub：<code class="notranslate">NewConsumeRedisPubSubFactory</code> 注册：
+<ul>
+<li><code class="notranslate">DecodeSwapTxProcessor</code></li>
+<li><code class="notranslate">FilterSwapTxProcessor</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>两路均输出到 <code class="notranslate">channelSink</code>，再通过：
+<ul>
+<li><code class="notranslate">MergeChannelProducer</code> + <code class="notranslate">mergeFactory</code> 注册：
+<ul>
+<li><code class="notranslate">MergeSwapRecordsProcessor</code></li>
+<li><code class="notranslate">SwapRecordGroupCopyOrderProcessor</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>最终 sink：<code class="notranslate">RedisMongoSink("dt_copy_order_signals")</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>2.2 核心处理：<code class="notranslate">SwapRecordGroupCopyOrderProcessor</code></h4>
+<ul>
+<li>
+<p><strong>业务含义</strong>：<br>
+把多源合并后的单笔 swap 结果（<code class="notranslate">SingleSwapResult</code>）逐个与“钱包组跟单策略”匹配，进行规则校验和买入次数限制，生成 <code class="notranslate">CopyOrderSignal</code>，写入 <code class="notranslate">dt_copy_order_signals</code>。</p>
+</li>
+<li>
+<p><strong>代码位置</strong>：</p>
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/processors/swap_record_group_copy_order_processor.go</code></li>
+<li>核心结构 &amp; 方法：
+<ul>
+<li><code class="notranslate">type SwapRecordGroupCopyOrderProcessor struct { userConfigLoader *UserConfigsLoader; notificationLimiter *NotificationLimiter; copyOrderLoader *CopyOrderConfigLoader }</code></li>
+<li><code class="notranslate">ProcessMessage(message interface{})</code>：
+<ul>
+<li>将输入转换为 <code class="notranslate">[]*transaction_summary.SingleSwapResult</code>，只处理：
+<ul>
+<li><code class="notranslate">Netflow != nil</code> 且 <code class="notranslate">Op == util.OperationBuy</code>。</li>
+</ul>
+</li>
+<li>对每条 <code class="notranslate">ssr</code>：
+<ol>
+<li><strong>根据 Maker 钱包查策略</strong>：<br>
+<code class="notranslate">walletMonitorStrategies := userConfigLoader.GetWalletMonitorStrategies(maker)</code></li>
+<li>遍历策略（每个 <code class="notranslate">MonitorRules</code>）：
+<ul>
+<li>只处理 <code class="notranslate">MonitorType == CopyTypeWalletGroup</code>；</li>
+<li>先构造基础 <code class="notranslate">CopyOrderSignal</code>：
+<ul>
+<li><code class="notranslate">SignalID = GenUUID()</code></li>
+<li><code class="notranslate">CopyTaskID = strategy.CopyOrderRequestID</code></li>
+<li><code class="notranslate">CopyType = CopyTypeWalletGroup</code></li>
+<li><code class="notranslate">UserID / DtUserID</code></li>
+<li><code class="notranslate">TradingTarget{Chain, Token, Symbol}</code></li>
+<li><code class="notranslate">Status = SignalStatusTriggered</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>规则校验</strong>：
+<ul>
+<li><code class="notranslate">monitorData, reason := strategy.RuleChecker.CheckWalletGroupCopyOrder(strategy, ssr)</code></li>
+<li>若不通过：
+<ul>
+<li>为 <code class="notranslate">signal</code> 填 <code class="notranslate">Status = SignalStatusSkipped</code> 和 <code class="notranslate">SkipDetail</code>（部分规则只记日志不展示）；</li>
+<li>仍加入 <code class="notranslate">notificationRecords</code>（方便观察原因）。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>买入次数限制</strong>：
+<ul>
+<li>对通过规则的：
+<ul>
+<li>使用 <code class="notranslate">copyOrderLoader.GetBuyTimesFromCache(taskID, token)</code> 读取 Redis 的“任务+token”买入次数；</li>
+<li><code class="notranslate">maxBuyTimes := strategy.TokenMaxBuyTimes</code>；</li>
+<li>若 <code class="notranslate">current &gt;= maxBuyTimes</code> → 丢弃，不生成信号；</li>
+<li>否则调用 <code class="notranslate">RecordTaskTokenTrigger(taskID, token)</code> 记录一次触发（之后异步刷回 Redis）。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>补充详情 &amp; 收集</strong>：
+<ul>
+<li>从 <code class="notranslate">monitorData.RecordData.(*events.WalletGroupSwapEvent)</code> 中提取 Wallet 交易详情、token 信息；</li>
+<li>填入 <code class="notranslate">signal.SignalDetail</code>（含多钱包交易统计）；</li>
+<li>Append 到 <code class="notranslate">notificationRecords</code>。</li>
+</ul>
+</li>
+</ol>
+</li>
+<li>返回：<br>
+若有 <code class="notranslate">notificationRecords</code>，打包成 <code class="notranslate">KafkaMessageGroup{Messages: notificationRecords}</code>，让 <code class="notranslate">RedisMongoSink</code> 统一写入 <strong>Mongo + Redis 队列 <code class="notranslate">dt_copy_order_signals</code></strong>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>在大流程中的角色</strong>：</p>
+<ul>
+<li>上游：Kafka / Redis 的链上 swap 交易；</li>
+<li>中游：Loader 提供钱包-策略映射 + 规则引擎 + 买入次数逻辑；</li>
+<li>下游：<code class="notranslate">dt_copy_order_signals</code>，由实际撮合/下单系统消费执行。</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3>3. 信号跟单：频道告警 → 策略匹配 → Token 规则 → 跟单信号</h3>
+<h4>3.1 服务入口：<code class="notranslate">signal_copy_order_monitor</code></h4>
+<ul>
+<li><strong>业务含义</strong>：<br>
+这个进程消费“频道告警队列 <code class="notranslate">dt_channel_alerts</code>”，针对配置了 <code class="notranslate">copy_type = signal_copy</code> 的任务，根据告警内容和 Token 规则生成跟单信号。</li>
+<li><strong>代码位置</strong>：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/signal_copy_order_monitor.go</code></li>
+<li>核心流程：
+<ul>
+<li>队列消费工厂：
+<ul>
+<li><code class="notranslate">NewConsumeRedisQueueFactory(name="signal_copy_order_monitor", QueueName="dt_channel_alerts", QueueMessageSink=mongoSink, QueueTimeout=5s)</code></li>
+<li>sink 仍为 <code class="notranslate">RedisMongoSink("dt_copy_order_signals")</code>。</li>
+</ul>
+</li>
+<li>配置加载：
+<ul>
+<li><code class="notranslate">copyOrderConfigLoader := NewCopyOrderConfigLoader(notificationLimiter, CopyTypeSignal, "")</code></li>
+<li><code class="notranslate">copyOrderConfigLoader.Start(ctx)</code> 加载所有 <code class="notranslate">signal_copy</code> 任务。</li>
+</ul>
+</li>
+<li>注册处理器：
+<ul>
+<li><code class="notranslate">NewCopyOrderDecodeChannelAlertProcessor(copyOrderConfigLoader)</code></li>
+<li><code class="notranslate">NewCopyOrderCheckSignalTokenProcessor()</code></li>
+</ul>
+</li>
+<li>启动：<code class="notranslate">factory.Start(ctx)</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>3.2 处理器一：<code class="notranslate">CopyOrderDecodeChannelAlertProcessor</code></h4>
+<ul>
+<li><strong>业务含义</strong>：<br>
+把频道告警（<code class="notranslate">NotificationRecord</code>）转成内部统一事件 <code class="notranslate">WalletGroupSwapEvent</code>，并为所有“同链上的信号跟单策略”生成 <code class="notranslate">CopyOrderSignalWithStrategy</code>（带策略上下文的信号）。</li>
+<li><strong>代码位置</strong>：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/processors/copy_order_decode_channel_alert_processor.go</code></li>
+<li>核心逻辑：
+<ul>
+<li><code class="notranslate">ProcessMessage(message interface{})</code>：
+<ul>
+<li>将原始消息（JSON 字符串或 <code class="notranslate">[]*NotificationRecord</code>）解析为 <code class="notranslate">[]*NotificationRecord</code>。</li>
+<li>对每条记录：
+<ul>
+<li>过滤无效或过期（一般超过 60s 的告警）。</li>
+<li>调 <code class="notranslate">parseWalletGroupSwapEvent(record.MonitorData.RecordData)</code>：
+<ul>
+<li>先用中间结构处理科学计数法，再转为 <code class="notranslate">events.WalletGroupSwapEvent</code>。</li>
+</ul>
+</li>
+<li>调 <code class="notranslate">convertToCopyOrderSignalWithStrategies(record, event)</code>：
+<ul>
+<li>调 <code class="notranslate">copyOrderConfigLoader.GetCopyOrderRules(event.Chain)</code> 获取该链所有 <code class="notranslate">signal_copy</code> 策略；</li>
+<li>先用事件构造一个 <code class="notranslate">baseSignal</code>：
+<ul>
+<li><code class="notranslate">CopyType = CopyTypeSignal</code>；</li>
+<li><code class="notranslate">SignalType</code> 根据 <code class="notranslate">MonitorType</code> 是 group_all_buy / group_all_sell 判断；</li>
+<li>补充 Token 基础数据（市值、holders、tag、创建时间等）。</li>
+</ul>
+</li>
+<li>为每个策略：
+<ul>
+<li>复制 <code class="notranslate">baseSignal</code>，填充：<code class="notranslate">SignalID</code>, <code class="notranslate">CopyTaskID</code>, <code class="notranslate">CopyTaskName</code>, <code class="notranslate">UserID</code>, <code class="notranslate">DtUserID</code>；</li>
+<li>封装为 <code class="notranslate">CopyOrderSignalWithStrategy{Strategy, Signal}</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>输出：<code class="notranslate">[]*CopyOrderSignalWithStrategy</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>3.3 处理器二：<code class="notranslate">CopyOrderCheckSignalTokenProcessor</code></h4>
+<ul>
+<li>
+<p><strong>业务含义</strong>：<br>
+基于 Token 维度的各种规则（市值、持仓人数、创建时长、平台/协议标签、黑名单、信号频率、运行时间等），为每个 <code class="notranslate">CopyOrderSignalWithStrategy</code> 做最终过滤与补充，再落到 <code class="notranslate">dt_copy_order_signals</code>。</p>
+</li>
+<li>
+<p><strong>代码位置</strong>：</p>
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/processors/copy_order_check_signal_token_processor.go</code></li>
+<li>核心逻辑：
+<ul>
+<li><code class="notranslate">ProcessMessage(message interface{})</code>：
+<ul>
+<li>输入：<code class="notranslate">[]*CopyOrderSignalWithStrategy</code>；</li>
+<li>遍历每个：
+<ul>
+<li>调 <code class="notranslate">rules.CheckSignalToken(strategy, signal)</code>：
+<ul>
+<li>利用 <code class="notranslate">CopyOrderSignal</code> 上多个 getter（<code class="notranslate">GetMktCap</code>, <code class="notranslate">GetHolders</code>, <code class="notranslate">GetTokenCreatedAt</code>, <code class="notranslate">GetPlatform</code>, <code class="notranslate">GetTop10Position</code>, <code class="notranslate">GetCreatorAddress</code> 等）；</li>
+<li>执行各类配置规则。</li>
+</ul>
+</li>
+<li>若不通过：
+<ul>
+<li><code class="notranslate">signal.Status = SignalStatusSkipped</code>；</li>
+<li>根据规则类型决定是否记录到 <code class="notranslate">SkipDetail</code>；</li>
+<li>清空 <code class="notranslate">SignalDetail</code> 里与 Token 频率相关字段。</li>
+</ul>
+</li>
+<li>若通过：
+<ul>
+<li>如果有 <code class="notranslate">TokenSignalFrequencyEvent</code>，则将其挂在 <code class="notranslate">signal.SignalDetail.SignalList</code>，方便前端查看“近期信号频率”。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>将所有（通过+不通过）的 <code class="notranslate">signal</code> 放入 <code class="notranslate">KafkaMessageGroup.Messages</code>，交给 <code class="notranslate">RedisMongoSink("dt_copy_order_signals")</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>整体链路角色</strong>：</p>
+<ul>
+<li>上游：<code class="notranslate">dt_channel_alerts</code>（各种策略产生的频道告警）。</li>
+<li>中游：
+<ul>
+<li><code class="notranslate">CopyOrderDecodeChannelAlertProcessor</code>：按链匹配所有 <code class="notranslate">signal_copy</code> 策略；</li>
+<li><code class="notranslate">CopyOrderCheckSignalTokenProcessor</code>：基于 Token 属性做最终过滤。</li>
+</ul>
+</li>
+<li>下游：<code class="notranslate">dt_copy_order_signals</code>（被执行系统消费）。</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3>4. 跟单执行结果 &amp; 收益结算通知</h3>
+<blockquote>
+<p>重要：<strong>实际下单/成交逻辑不在本仓库</strong>，这里只有“结果回写 + 通知”。</p>
+</blockquote>
+<h4>4.1 执行结果模型：<code class="notranslate">CopyOrderTransaction</code> + <code class="notranslate">TradeResult</code></h4>
+<ul>
+<li><strong>业务含义</strong>：<br>
+一次跟单交易由执行系统生成 <code class="notranslate">TradeResult</code>，其中 <code class="notranslate">Task</code> 字段具体是某个任务类型的结构体（这里是 <code class="notranslate">CopyOrderTransaction</code>），包含交易详情、盈亏等，用于通知和前端展示。</li>
+<li><strong>代码位置</strong>：
+<ul>
+<li>文件：<code class="notranslate">models/notifications.go</code></li>
+<li>结构体：
+<ul>
+<li><code class="notranslate">type CopyOrderTransaction struct { ... }</code>
+<ul>
+<li><code class="notranslate">CopyOrderTaskID</code>：对应上游 <code class="notranslate">CopyOrder.ID</code>；</li>
+<li><code class="notranslate">UserID</code>, <code class="notranslate">DtUserID</code>, <code class="notranslate">SignalID</code>, <code class="notranslate">TradingTaskID</code>；</li>
+<li><code class="notranslate">Op</code>：交易操作类型（跟单目前主要是买入）；</li>
+<li><code class="notranslate">Target</code>：<code class="notranslate">Target{Chain, Token, Decimal, Symbol, Icon}</code>；</li>
+<li><code class="notranslate">TradingParams</code>：gas、滑点、AntiMev 等；</li>
+<li><code class="notranslate">TradingRecord</code>：<code class="notranslate">StatusCode</code>, <code class="notranslate">TxHash</code>, <code class="notranslate">Amount</code>, <code class="notranslate">Price</code>, <code class="notranslate">Volume</code>, <code class="notranslate">BaseTokenAmount</code>, <code class="notranslate">Profit</code> 等。</li>
+</ul>
+</li>
+<li><code class="notranslate">type TradeResult struct { TaskType, Task json.RawMessage, TxHash, StatusCode, BaseTokenAmount, TokenAmount, BaseTokenSymbol, ErrInfo, ExtraParams }</code>
+<ul>
+<li><code class="notranslate">Task</code> 中存的是 JSON 形式的 <code class="notranslate">CopyOrderTransaction</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>4.2 系统消息流水线：<code class="notranslate">SystemEventNotifyProcessor</code></h4>
+<ul>
+<li><strong>业务含义</strong>：<br>
+监听系统事件，当发现 <code class="notranslate">MonitorTypeCopyOrderResult</code>（跟单结果）时，构建各渠道通知（app、web、TG 等），并通过模版生成文案。</li>
+<li><strong>代码位置</strong>：
+<ul>
+<li>监控类型定义：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/core/user_configs/types.go</code>
+<ul>
+<li><code class="notranslate">MonitorTypeCopyOrderResult string = "copy_order_result"</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>处理器：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/processors/system_event_notify_processor.go</code></li>
+<li>核心逻辑：
+<ul>
+<li><code class="notranslate">ProcessMessage(message interface{})</code>：
+<ul>
+<li>只处理 <code class="notranslate">notificationRecord.Meta.EventType == NotifyEventTypeSystemEvent</code>；</li>
+<li>分支 <code class="notranslate">MonitorTypeCopyOrderResult</code>：
+<ol>
+<li>解析 <code class="notranslate">NotifyRecord := TradeResult</code>（<code class="notranslate">RecordData</code>）；</li>
+<li>再解析 <code class="notranslate">NotifyRecord.Task</code> → <code class="notranslate">CopyOrderTransaction</code>；</li>
+<li>加载用户的告警配置（语言/渠道）；</li>
+<li>为每个通知目标构建 <code class="notranslate">NotificationItem</code>，调用模板：
+<ul>
+<li><code class="notranslate">templates.GetRender()(meta, notifyRecord, MonitorTypeCopyOrderResult, notificationItem, userConfig, version)</code>；</li>
+<li>实际会走到 <code class="notranslate">copy_order_result_app</code> 模版；</li>
+</ul>
+</li>
+<li>调 <code class="notranslate">p.notify</code> 分发到对应 notifier（app/web/tg 等）。</li>
+</ol>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>4.3 app 文案模版 &amp; WebSocket/Redis 推送</h4>
+<ul>
+<li><strong>app 推送模版</strong>：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/core/templates/copy_order_result_templates.go</code></li>
+<li>逻辑：
+<ul>
+<li><code class="notranslate">init()</code> 注册模版 key：<code class="notranslate">"copy_order_result_app"</code>；</li>
+<li><code class="notranslate">renderCopyOrderResult</code>：
+<ul>
+<li>解析 <code class="notranslate">tradingResult.Task</code> → <code class="notranslate">CopyOrderTransaction</code>；</li>
+<li>组装 <code class="notranslate">CopyOrderResultRenderData</code>（操作文案、代币符号、基础代币金额、token 数量、错误信息等）；</li>
+<li>加载模版文件：
+<ul>
+<li>body：<code class="notranslate">monitor/auto_trading_result/&lt;notificationType&gt;_&lt;lang&gt;_body.tpl</code></li>
+<li>title：<code class="notranslate">monitor/copy_order_result/&lt;lang&gt;_title.tpl</code>；</li>
+</ul>
+</li>
+<li>返回标题+正文。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Redis/Websocket 推送</strong>：
+<ul>
+<li>文件：<code class="notranslate">apps/debot_monitor_center/core/notifications/redis_queue/redis_notification.go</code></li>
+<li>结构体：<code class="notranslate">RedisNotifier</code>，发布到 Redis <code class="notranslate">user_event_channel</code>；</li>
+<li><code class="notranslate">Notify(message interface{})</code>：
+<ul>
+<li>对 <code class="notranslate">MonitorTypeCopyOrderResult</code>：
+<ol>
+<li>解析 <code class="notranslate">TradeResult</code> + <code class="notranslate">CopyOrderTransaction</code>；</li>
+<li>构建 <code class="notranslate">AutoTradingResultEvent{Op, Chain, TaskID, StatusCode, TxHash, Wallet, BaseTokenSymbol, BaseTokenAmount, TokenAddress, TokenSymbol, TokenAmount, ErrCode}</code>；</li>
+<li>封装到 <code class="notranslate">SystemEvent{UserID, EventType="copy_order_result", Data=AutoTradingResultEvent}</code>；</li>
+<li><code class="notranslate">Publish("user_event_channel", json)</code> → WebSocket 层消费并推给前端。</li>
+</ol>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3>5. “撤单 / 关闭跟单任务”说明</h3>
+<ul>
+<li><strong>撤单</strong>：
+<ul>
+<li>本仓库中没有看到“单笔跟单撤单”的服务端流程；<code class="notranslate">CopyOrderTransaction</code> 目前主要描述买入结果，卖出（止盈/止损）更多在通用自动交易模块中实现，copy order 的卖出规则逻辑不在这里。</li>
+</ul>
+</li>
+<li><strong>关闭任务</strong>：
+<ul>
+<li>实际操作是修改 Mongo <code class="notranslate">dt_copy_order_task</code> 中该任务的 <code class="notranslate">status = "stopped"</code>；</li>
+<li><code class="notranslate">CopyOrderConfigLoader</code> 在下一轮 <code class="notranslate">increaseLoadUserConfigs</code> 中不再加载该任务，从而后续 swap/告警不会再触发对应的跟单信号。</li>
+</ul>
+</li>
+</ul></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://PeekaQiu.github.io/3checktheerror.github.io">Purple Donut的博客</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行 "+diffDay+" 天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.disabled=true;
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","PeekaQiu/3checktheerror.github.io");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+
+
+</html>

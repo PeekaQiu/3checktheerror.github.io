@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="### 表结构设计
+
+#### 表
+用户，聊天记录，回测结果，关联钱包（实际上用的是内置PG中的数据），关联KOL
+
+#### 关键字段
+关联钱包：是否是聪明钱
+用户：是否是管理员
+聊天记录：发收ID，消息内容，聊天类型（私，群）
+
+### 四大内容
+
+#### 用户登陆鉴权
+首次登陆拿到系统签发的JWT Token，后续请求HTTP通过Authorization Header携带，Websocket通过URL参数传递。">
+<meta property="og:title" content="技术细节">
+<meta property="og:description" content="### 表结构设计
+
+#### 表
+用户，聊天记录，回测结果，关联钱包（实际上用的是内置PG中的数据），关联KOL
+
+#### 关键字段
+关联钱包：是否是聪明钱
+用户：是否是管理员
+聊天记录：发收ID，消息内容，聊天类型（私，群）
+
+### 四大内容
+
+#### 用户登陆鉴权
+首次登陆拿到系统签发的JWT Token，后续请求HTTP通过Authorization Header携带，Websocket通过URL参数传递。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://PeekaQiu.github.io/3checktheerror.github.io/post/ji-shu-xi-jie.html">
+<meta property="og:image" content="https://github.githubassets.com/favicons/favicon.svg">
+<title>技术细节</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">技术细节</h1>
+<div class="title-right">
+    <a href="https://PeekaQiu.github.io/3checktheerror.github.io" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/PeekaQiu/3checktheerror.github.io/issues/8" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><h3>表结构设计</h3>
+<h4>表</h4>
+<p>用户，聊天记录，回测结果，关联钱包（实际上用的是内置PG中的数据），关联KOL</p>
+<h4>关键字段</h4>
+<p>关联钱包：是否是聪明钱<br>
+用户：是否是管理员<br>
+聊天记录：发收ID，消息内容，聊天类型（私，群）</p>
+<h3>四大内容</h3>
+<h4>用户登陆鉴权</h4>
+<p>首次登陆拿到系统签发的JWT Token，后续请求HTTP通过Authorization Header携带，Websocket通过URL参数传递。服务层收到请求后校验，提取出用户ID注入到请求上下文</p>
+<p>Token中有啥<br>
+payload中放用户ID、签发时间、过期时间</p>
+<blockquote>
+<p>区别：HTTP鉴权每次请求都验证，Websocket只在握手阶段验证</p>
+</blockquote>
+<p>验证通过后，把conn, uid放到2个map中</p>
+<p>总体流程总结：</p>
+<ol>
+<li>用户发起登陆请求</li>
+<li>查询密码</li>
+<li>2通过后，生成JWT Token返回Token</li>
+<li>后续请求携带Token</li>
+</ol>
+<p>HTTP鉴权流程总结：</p>
+<ol>
+<li>发起请求，Header Authorization: Bearer XXX</li>
+<li>JWT中间件验证签名和过期时间</li>
+<li>JWT中间件提取uid，注入到request.context</li>
+<li>根据uid查询用户数据返回</li>
+</ol>
+<p>Websocket鉴权流程总结</p>
+<ol>
+<li>发起请求：Header:websocket:token</li>
+<li>提取Token，解析拿到uid</li>
+<li>HTTP升级到websocket</li>
+<li>请求添加连接到map</li>
+<li>如果map中已有链接则清理，建立双向映射</li>
+<li>开发消息</li>
+<li>连接断开，清理map</li>
+</ol>
+<h4>聊天服务</h4>
+<p>整体架构：用户接入，ws管理连接，消息路由，业务CRUD<br>
+ws连接管理：</p>
+<ol>
+<li>认证后升级</li>
+<li>注册新连接，关闭旧连接，实现单点登录</li>
+<li>启动处理协程</li>
+</ol>
+<p>消息处理：</p>
+<ol>
+<li>协程无限循环，JWT Token拿到UID强制覆盖SendID</li>
+<li>解析消息，根据消息类型路由到群聊/私聊</li>
+<li>对话消息入库</li>
+<li>生成会话ID</li>
+</ol>
+<p>消息推送</p>
+<ol>
+<li>遍历用户id推送消息（如果是私聊先生成会话ID）</li>
+<li>实现消息可靠性（ACK，消息队列，用户上线后主动拉取）</li>
+<li>异常连接、panic、超时连接处理</li>
+</ol>
+<h4>助手服务</h4>
+<p>总体流程：自然语言-&gt; 提取uid -&gt; 加载用户对话历史 -&gt; 路由决策 -&gt; 多轮调用tools -&gt; 返回响应</p>
+<h5>路由设计</h5>
+<p>整体架构<br>
+自然语言-&gt; 路由决策 -&gt; 处理器层 -&gt; 工具调用层 -&gt; 业务逻辑层 -&gt; DB</p>
+<blockquote>
+<p>处理器层与记忆管理层相连，处理用户会话<br>
+路由流程：自然语言 -&gt; 加载对话历史 -&gt; 构建提示词 -&gt; call llm -&gt; 解析输出 -&gt; 看情况使用制定处理器/默认处理器 -&gt; 返回结果</p>
+</blockquote>
+<p>处理器：</p>
+<ul>
+<li>实现handler接口，定义方法：name, description, chains</li>
+</ul>
+<h5>Agent设计</h5>
+<p>工作流程</p>
+<ol>
+<li>自然语言输入</li>
+<li>循环分析输入，调用对应参数类工具</li>
+<li>用参数调用动作类工具</li>
+<li>完成任务</li>
+</ol>
+<h5>提示词设计</h5>
+<ol>
+<li>提供工具列表，包括工具名、输入、输出</li>
+<li>定义思考和行动格式</li>
+</ol>
+<h5>工具描述设计</h5>
+<ul>
+<li>明确使用场景</li>
+<li>说明参数格式</li>
+<li>说明依赖关系</li>
+</ul>
+<h5>会话记忆设计</h5>
+<p>会话隔离<br>
+一个map，key是uid，value是用户memory<br>
+用户请求时，JWT Token中提取uid注入到context，利用uid查找是否存在memory<br>
+用互斥锁保证map的并发访问</p>
+<p>摘要缓冲<br>
+当上下文过长怎么办？<br>
+长期记忆（摘要）+短期记忆（历史对话）设计<br>
+没超过阈值，直接保存到短期记忆<br>
+否则，调用LLM压缩context生成摘要，覆盖式更新长期记忆<br>
+加载记忆时，同时加载短期和长期记忆</p>
+<p>降级策略设计：默认处理器返回普通对话内容，错误处理器返回错误信息</p>
+<h4>知识库</h4>
+<p>总体逻辑：根据用户输入判断，是读知识库，还是写知识库<br>
+读知识库：先检索TopK个向量，生成答案<br>
+写知识库：提取、清理、分块、向量化输入文本，存到数据库</p>
+<h5>文档提取入库流程</h5>
+<ol>
+<li>确认文件是否存在</li>
+<li>拿到doc对象</li>
+<li>遍历doc，拿到每一页的文本内容追加到buffer</li>
+<li>清理文本</li>
+<li>返回处理结果</li>
+</ol>
+<h5>语义检索与智能问答</h5>
+<p>流程</p>
+<ol>
+<li>自然语言输入</li>
+<li>首次调用，初始化向量存储</li>
+<li>输入问题转化为向量，TopK检索，返回文档</li>
+<li>构建提示词，call llm生成答案</li>
+<li>返回结果</li>
+</ol>
+<p>TopK优化 + 答案输出优化</p>
+<h5>知识库更新机制</h5>
+<ol>
+<li>Agent解析上传内容</li>
+<li>结构化解析，如果失败，JSON解析</li>
+<li>调用PDFProcessor，设置chunk，overlap</li>
+<li>向量存储初始化</li>
+<li>切块，向量化，存储</li>
+<li>返回结果</li>
+</ol>
+<h5>知识库处理器设计</h5>
+<p>两个knowledge: update + retrieval</p>
+<blockquote>
+<p>如果上传同一文件，比对更新时间戳，覆盖式更新<br>
+参数设置：chunk大小，chunk重叠区域大小</p>
+</blockquote></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://PeekaQiu.github.io/3checktheerror.github.io">Purple Donut的博客</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行 "+diffDay+" 天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.disabled=true;
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","PeekaQiu/3checktheerror.github.io");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+
+
+</html>
